@@ -60,7 +60,7 @@ Function Scan_Dirs {
     $global:servicepath = "$scanpath\Services"
     $global:discoverypath = "$ccdcpath\Discovery"
 
-    $paths = @($scanpath,$firewallpath,$inboundpath,$outboundpath,$schtaskpath,$servicepath)
+    $paths = @($scanpath,$firewallpath,$inboundpath,$outboundpath,$schtaskpath,$servicepath,$discoverypath)
     ForEach ($path in $paths){
         Write-Host "Creating Directory: $path" -ForegroundColor Cyan
         If (!(test-path $path)){
@@ -90,12 +90,10 @@ Function Scan_Dirs {
 Function Discovery_ {
     cls
     Write-Host "Starting Function: Discovery_" -ForegroundColor Cyan
-    Start-Sleep -s 
+    Start-Sleep -s 1
     Get-NetFirewallRule | Where {$_.Direction -eq "Inbound"} | Where {$_.Enabled -eq "True"} | Select Name, DisplayName, Description, DisplayGroup, Profile, Action | Out-File $discoverypath\Active-Inbount-Rules.txt
     Get-NetFirewallRule | Where {$_.Direction -eq "Outbound"} | Where {$_.Enabled -eq "True"} | Select Name, DisplayName, Description, DisplayGroup, Profile, Action | Out-File $discoverypath\Active-Outbount-Rules.txt
     Get-ScheduledTask | Where {$_.State -ne "Disabled"} | Select Taskname , State, TaskPath | FL | Out-File $discoverypath\Active-ScheduledTasks.txt
-    Get-LocalUser | Out-File $discoverypath\All-Local-Users.txt
-    Get-LocalUser | Where {$_.Enabled -eq "True"} | Out-file $discoverypath\All-Enabled-Local-Users.txt
     Write-Host "Function: Discovery_   -   Complete" -ForegroundColor Green
     Continue_
 }
@@ -138,7 +136,7 @@ Function Set_External_IPs {
     Start-Sleep -s 1
     $global:Docker ="172.25.$Team.97"
     $global:DNSNTP = "172.25.$Team.20"
-    $global:Ubuntu14Web = "172.25.$Team.23"
+    $global:Ubuntu18Web = "172.25.$Team.23"
     $global:ADDNS = "172.25.$Team.27"
     $global:UbuntuWrk = "172.25.$Team.100"
     $global:PAMI = "172.25.$Team.150"
@@ -224,13 +222,16 @@ Function Damage_Reversal {
                 # Disable Default Accounts
     #net user Guest /active:no
                 # Show Local Users
+    $disUsers = Get-LocalUser | Where {$_.Name -ne $env:username}
     $totUsers = Get-LocalUser
-    ForEach ($user in $totUsers){
+    ForEach ($user in $disUsers){
         If ($user -ne $env:username){
-            Write-Host "Account: $user - Disabled"
-            Get-LocalUser | Where {$_.Name -ne $env:username} | Disable-LocalUser
+            Write-Host "Account: $user - Disabled" -ForegroundColor Yellow
+	    Get-LocalUser | Where {$_.Name -ne $env:username} | Disable-LocalUser
         }
-    }
+    }    
+    Get-LocalUser | Out-File $discoverypath\All-Local-Users.txt
+    Get-LocalUser | Where {$_.Enabled -eq "True"} | Out-file $discoverypath\All-Enabled-Local-Users.txt
     Get-Content "$discoverypath\All-Local-Users.txt"
     Write-Host "Check list for suspicious accounts..." -ForegroundColor Cyan
     Write-Host "Output saved to $discoverypath\All-Local-Users.txt" -ForegroundColor Green
@@ -243,10 +244,10 @@ Function Damage_Reversal {
     Write-Host "Disabling Windows Features" -ForegroundColor Cyan
     $features = @("TelnetServer","TelnetClient","TFTP","SMB1Protocol","SMB1Protocol-Client","SMB1Protocol-Server","SMB1Protocol-Deprecation","SmbDirect","Printing-Foundation-Features","Printing-Foundation-InternetPrinting-Client","Printing-Foundation-LPDPrintService","Printing-Foundation-LPRPortMonitor")
     ForEach ($feature in $features){
-        $chk = Get-WindowsOptionalFeature -Online | Where {$_.FeatureName -like "*$feature*"}
+        $chk = Get-WindowsOptionalFeature -Online | Where {$_.FeatureName -like "*$feature*"} | Where {$_.State -eq "Enabled"}
         If($chk){
-            Write-Host "Disabling feature: $feature" -ForegroundColor Cyan
-            Disable-WindowsOptionalFeature -Online -FeatureName $feature -NoRestart
+            Write-Host "Disabling feature: $feature" -ForegroundColor Yellow
+            Disable-WindowsOptionalFeature -Online -FeatureName $feature -NoRestart | Out-File
         }
         If (!($chk)){
             Write-Warning "$feature not found"
@@ -374,7 +375,7 @@ Function Damage_Reversal {
     REG query "HKLM\SOFTWARE\Policies\Microsoft\Windows Defender" /v DisableAntiSpyware | Add-Content $regProof
     REG delete "HKLM\SOFTWARE\Policies\Microsoft\Windows Defender" /v DisableAntiSpyware /f | Out-Null
                 # Change setting to NOT store plaintext passwords
-    Add-Content $regProof "Removing stored plaintext passwords:"wToGetHelp
+    Add-Content $regProof "Removing stored plaintext passwords:"
     REG query "HKLM\SYSTEM\CurrentControlSet\services\LanmanWorkstation\Parametersn" /v EnablePlainTextPassword | Add-Content $regProof
     REG add "HKLM\SYSTEM\CurrentControlSet\services\LanmanWorkstation\Parameters" /v EnablePlainTextPassword /t REG_DWORD /d 0 /f | Out-Null
     REG query "HKLM\SYSTEM\CurrentControlSet\services\LanmanWorkstation\Parameters" /v EnablePlainTextPassword | Add-Content $regProof
