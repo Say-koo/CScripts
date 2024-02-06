@@ -632,6 +632,9 @@ If ($setExt) {
 
                 # 4. Setting CCDC directories
 CCDC_Directories
+		# Adding route
+route add 172.25.21.0     mask 255.255.255.0 172.31.21.2     metric 1
+Start-Sleep -s 1
 
 Scan_Dirs
 
